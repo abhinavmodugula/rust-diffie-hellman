@@ -1,108 +1,104 @@
-fn test_image() {
+use image::RgbImage;
+use image::ImageBuffer;
+use rand::Rng;
+use image::GenericImageView;
+use image::Pixel;
+use std::io::Write;
+use std::io::prelude::*;
+use std::fs::File;
+use image::Rgb;
+
+fn pick_random (encryptfile: &str) {
     let mut rng = rand::thread_rng();
-    
-    //Initial set up
-    let g: i64 = rng.gen_range(2000000000..5000500000000);
-    let x: i64 = rng.gen_range(50000000..10000500000);
-    let img = image::open("f1.jpeg").unwrap();
-    println!("dimensions of original image: {:?}", img.dimensions());
+    let mut rand_vec = Vec::new();
+    for i in 0..rng.gen_range(20000..50000) {
+        let new_base: u64 = rng.gen_range(0..2_u64.pow(63));
+        let new_base_vec = new_base.to_ne_bytes();
+        rand_vec.append(&mut new_base_vec.to_vec());
+    }
+    let mut f = File::create(".".to_owned()+encryptfile).expect("Unable to create file");
+    for i in 0..rand_vec.len()-1 {
+        write!(f, "{},", rand_vec[i]);
+    }
+    write!(f, "{}", rand_vec[rand_vec.len()-1]);
 
-    //Bob is sending the image
-    let y: i64 = rng.gen_range(3..9);
-    let com_sec: i64 = rng.gen_range(42..423);
-    let inter = g^(com_sec*y) % x;
+}
 
-    //Now, apply the encryption to the image
+fn reader(encryptfile: &str) -> Vec<u8> {
+  let mut file = std::fs::File::open(encryptfile.to_string()).unwrap();
+  let mut contents = String::new();
+  file.read_to_string(&mut contents).unwrap();
+  let mut v: Vec<u8> = Vec::new();
+  for s in contents.split(",") {
+    v.push(s.trim().parse::<u8>().unwrap());
+  }
+  v
+}
+
+fn encrypt(filename: &str, encryptfile: &str) {
+
+    let rand_vec = reader(encryptfile);
+    let img = image::open(filename.to_string()).unwrap();
     let (w, h) = img.dimensions();
-    let mut out: RgbaImage = ImageBuffer::new(w, h);
-
-    for pixel in img.pixels() {
-        let mut other_pixel = out.get_pixel_mut(pixel.0, pixel.1);
-        let orig_pixel = pixel.2.clone().0;
-        
-        let mut index = 0;
-        let mut new_vals: [u8;4] = [0, 0, 0, 0];
-        while index < 4 {
-            let org_value = orig_pixel[index] as i64;
-            new_vals[index] = (org_value^inter) as u8;
-            index += 1;
-        }
-
-        *other_pixel = image::Rgba(new_vals);
+    let mut image: RgbImage = ImageBuffer::<Rgb<u8>, Vec<u8>>::new(w, h);
+    let mut count = 0;
+    for x in 0..w {
+	for y in 0..h {
+	    let mut new_vals: [u8;3] = [0, 0, 0];
+	    for i in 0..3 {
+	     	new_vals[i] = img.get_pixel(x, y).to_rgb().0[i]^rand_vec[count%rand_vec.len()];
+	    }
+    	    image[(x,y)] = image::Rgb(new_vals);
+	    count += 1;
+    	}
     }
+    println!("{:?}", image.get_pixel(0,0).to_rgb().0);
+    image.save(filename.to_owned()+".png").unwrap(); //save the encyrpted image for later
+    //println!("{:?}", image::open(filename.to_owned()+".png").unwrap().get_pixel(0,0).to_rgb().0);
+}
 
-    println!("dimensions of output image: {:?}", out.dimensions());
-    out.save("encrypted_f1.jpeg").unwrap(); //save the encyrpted image for later
+fn decrypt(filename: &str, encryptfile: &str) {
 
-    //now, decrypt the image (now, on Alice)
-    let mut decrypted: RgbaImage = ImageBuffer::new(w, h);
-    for xi in 0..w {
-        for yi in 0..h {
-            let pixel = out.get_pixel_mut(xi as u32, yi as u32);
-            let mut other_pixel = decrypted.get_pixel_mut(xi as u32, yi as u32);
-            let orig_pixel = pixel.0.clone();
-
-            let ref_pixel = img.get_pixel(xi, yi).0;
-
-            let mut index = 0;
-            let mut new_vals: [u8;4] = [0, 0, 0, 0];
-            while index < 4 {
-                let org_value = orig_pixel[index] as i64;
-                new_vals[index] = (org_value^inter) as u8;
-                index += 1;
+    let rand_vec = reader(encryptfile);
+    let img = image::open(filename.to_string()).unwrap();
+    let (w, h) = img.dimensions();
+    let mut image: RgbImage = ImageBuffer::new(w, h);
+    let mut count = 0;
+    for x in 0..w {
+        for y in 0..h {
+            let mut new_vals: [u8;3] = [0, 0, 0];
+            for i in 0..3 {
+                new_vals[i] = img.get_pixel(x, y).to_rgb().0[i]^rand_vec[count%rand_vec.len()];
             }
-
-            //println!("Should be equal: {:?} and {:?} ", new_vals, ref_pixel);
-            
-            *other_pixel = image::Rgba(new_vals);
+            image[(x,y)] = image::Rgb(new_vals);
+            count += 1;
         }
     }
-    decrypted.save("decrypted_f1.jpeg").unwrap();
+
+    image.save(filename.to_string()).unwrap(); //save the encyrpted image for later
+
 }
 
-fn test_equality() {
-    let mut rng= rand::thread_rng();
-
-    //first, generate random mod and base
-    let rand_mod: i64 = rng.gen_range(2000000000..5000500000000);
-    let rand_base: i64 = rng.gen_range(50000000..10000500000);
-    println!("Mod: {} Base: {}", rand_mod, rand_base);
-
-    let alice_secret: i64 = rng.gen_range(3..9);
-    let send_to_bob = rand_base^alice_secret % rand_mod;
-
-    let bob_secret: i64 = rng.gen_range(3..9);
-    let send_to_alice = rand_base^bob_secret % rand_mod;
-
-    let alice_compute = send_to_alice^alice_secret % rand_mod;
-    let bob_compute: i64 = send_to_bob^bob_secret % rand_mod;
-
-    println!("Alice: {} Bob: {}", alice_compute, bob_compute);
+fn encrypt_text(filename: &str, encryptfile: &str) {
+  let rand_vec = reader(filename);
+  let mut f = std::fs::File::open(encryptfile).expect("Unable to create file");
+  let mut contents = String::new();
+  f.read_to_string(&mut contents).unwrap();
+  let contents = contents.as_bytes();
+  println!("{:?}", contents);
+  //let mut f = File::create(encryptfile).expect("Unable to create file");
+  //for index in 0..contents.len() {
+    //let char = contents[index] ^ rand_vec[index];
+    //println!("{} = {} ^ {}", char, rand_vec[index], contents[index]);
+    //write!(f, "{}", char as char);
+  //}
 }
 
-fn test_sending_data() {
-    let mut rng= rand::thread_rng();
-
-    //first, generate random mod and base
-    let g: i64 = rng.gen_range(2000000000..5000500000000);
-    let x: i64 = rng.gen_range(50000000..10000500000);
-
-    //Bob is sending to Alice
-    let y: i64 = rng.gen_range(3..9);
-    let com_sec: i64 = rng.gen_range(42..423);
-    let data_file = fs::read("input_file.txt");
-
-    let data: i64 = 44;
-
-    //calculate g^xy mod p
-    let inter = g^(com_sec*y) % x;
-    let encrypted = data^inter;
-
-    //This is now send to Alice in order to decrypt
-    let inter2 = encrypted^inter;
-    println!("{}", inter2);
+fn main() { 
+    pick_random("secret");
+    encrypt("f1.jpeg", ".secret");
+    decrypt("encrypted_f1.jpeg", ".secret");
+    //encrypt_text(".secret", "hello.txt");
 }
 
-fn main() {
-    println!("Hello, world!");
-}
+
