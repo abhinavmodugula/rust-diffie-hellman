@@ -1,3 +1,65 @@
+fn test_image() {
+    let mut rng = rand::thread_rng();
+    
+    //Initial set up
+    let g: i64 = rng.gen_range(2000000000..5000500000000);
+    let x: i64 = rng.gen_range(50000000..10000500000);
+    let img = image::open("f1.jpeg").unwrap();
+    println!("dimensions of original image: {:?}", img.dimensions());
+
+    //Bob is sending the image
+    let y: i64 = rng.gen_range(3..9);
+    let com_sec: i64 = rng.gen_range(42..423);
+    let inter = g^(com_sec*y) % x;
+
+    //Now, apply the encryption to the image
+    let (w, h) = img.dimensions();
+    let mut out: RgbaImage = ImageBuffer::new(w, h);
+
+    for pixel in img.pixels() {
+        let mut other_pixel = out.get_pixel_mut(pixel.0, pixel.1);
+        let orig_pixel = pixel.2.clone().0;
+        
+        let mut index = 0;
+        let mut new_vals: [u8;4] = [0, 0, 0, 0];
+        while index < 4 {
+            let org_value = orig_pixel[index] as i64;
+            new_vals[index] = (org_value^inter) as u8;
+            index += 1;
+        }
+
+        *other_pixel = image::Rgba(new_vals);
+    }
+
+    println!("dimensions of output image: {:?}", out.dimensions());
+    out.save("encrypted_f1.jpeg").unwrap(); //save the encyrpted image for later
+
+    //now, decrypt the image (now, on Alice)
+    let mut decrypted: RgbaImage = ImageBuffer::new(w, h);
+    for xi in 0..w {
+        for yi in 0..h {
+            let pixel = out.get_pixel_mut(xi as u32, yi as u32);
+            let mut other_pixel = decrypted.get_pixel_mut(xi as u32, yi as u32);
+            let orig_pixel = pixel.0.clone();
+
+            let ref_pixel = img.get_pixel(xi, yi).0;
+
+            let mut index = 0;
+            let mut new_vals: [u8;4] = [0, 0, 0, 0];
+            while index < 4 {
+                let org_value = orig_pixel[index] as i64;
+                new_vals[index] = (org_value^inter) as u8;
+                index += 1;
+            }
+
+            //println!("Should be equal: {:?} and {:?} ", new_vals, ref_pixel);
+            
+            *other_pixel = image::Rgba(new_vals);
+        }
+    }
+    decrypted.save("decrypted_f1.jpeg").unwrap();
+}
+
 fn test_equality() {
     let mut rng= rand::thread_rng();
 
