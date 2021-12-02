@@ -7,7 +7,7 @@ use std::io::Write;
 use std::io::prelude::*;
 use std::fs::File;
 
-fn pick_random () {
+fn pick_random (encryptfile: &str) {
     let mut rng = rand::thread_rng();
     let mut rand_vec = Vec::new();
     for i in 0..rng.gen_range(20000..50000) {
@@ -15,17 +15,16 @@ fn pick_random () {
         let new_base_vec = new_base.to_ne_bytes();
         rand_vec.append(&mut new_base_vec.to_vec());
     }
-    let mut f = File::create("output.vtk").expect("Unable to create file");
+    let mut f = File::create(".".to_owned()+encryptfile).expect("Unable to create file");
     for i in 0..rand_vec.len()-1 {
         write!(f, "{},", rand_vec[i]);
     }
     write!(f, "{}", rand_vec[rand_vec.len()-1]);
-    reader();
 
 }
 
-fn reader() -> Vec<u8> {
-  let mut file = std::fs::File::open("output.vtk").unwrap();
+fn reader(encryptfile: &str) -> Vec<u8> {
+  let mut file = std::fs::File::open(encryptfile.to_string()).unwrap();
   let mut contents = String::new();
   file.read_to_string(&mut contents).unwrap();
   let mut v: Vec<u8> = Vec::new();
@@ -35,9 +34,9 @@ fn reader() -> Vec<u8> {
   v
 }
 
-fn encrypt(filename: &str) {
+fn encrypt(filename: &str, encryptfile: &str) {
 
-    let rand_vec = reader();
+    let rand_vec = reader(encryptfile);
     let img = image::open(filename.to_string()).unwrap();
     let (w, h) = img.dimensions();
     let mut image: RgbImage = ImageBuffer::new(w, h);
@@ -53,12 +52,12 @@ fn encrypt(filename: &str) {
     	}
     }
 
-    image.save("encrypted_f1.jpeg").unwrap(); //save the encyrpted image for later
+    image.save("encrypted_".to_owned()+filename).unwrap(); //save the encyrpted image for later
 }
 
-fn decrypt(filename: &str) {
+fn decrypt(filename: &str, encryptfile: &str) {
 
-    let rand_vec = reader();
+    let rand_vec = reader(encryptfile);
     let img = image::open(filename.to_string()).unwrap();
     let (w, h) = img.dimensions();
     let mut image: RgbImage = ImageBuffer::new(w, h);
@@ -74,12 +73,12 @@ fn decrypt(filename: &str) {
         }
     }
 
-    image.save("decrypted_f1.jpeg").unwrap(); //save the encyrpted image for later
+    image.save("decrypted_".to_owned()+filename).unwrap(); //save the encyrpted image for later
 
 }
 
 fn main() { 
-    pick_random();
-    encrypt("f1.jpeg");
-    decrypt("encrypted_f1.jpeg");
+    pick_random("secret");
+    encrypt("f1.jpeg", ".secret");
+    decrypt("encrypted_f1.jpeg", ".secret");
 }
