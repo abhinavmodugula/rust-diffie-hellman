@@ -6,7 +6,10 @@ use image::Pixel;
 use std::io::Write;
 use std::io::prelude::*;
 use std::fs::File;
+use std::fs;
 use image::Rgb;
+use std::env;
+
 
 fn pick_random (encryptfile: &str) {
     let mut rng = rand::thread_rng();
@@ -23,6 +26,7 @@ fn pick_random (encryptfile: &str) {
     write!(f, "{}", rand_vec[rand_vec.len()-1]);
 
 }
+
 
 fn reader(encryptfile: &str) -> Vec<u8> {
   let mut file = std::fs::File::open(encryptfile.to_string()).unwrap();
@@ -46,15 +50,14 @@ fn encrypt(filename: &str, encryptfile: &str) {
 	for y in 0..h {
 	    let mut new_vals: [u8;3] = [0, 0, 0];
 	    for i in 0..3 {
-	     	new_vals[i] = img.get_pixel(x, y).to_rgb().0[i]^rand_vec[count%rand_vec.len()];
+	     	new_vals[i] = img.get_pixel(x, y).to_rgb().0[i]^rand_vec[(3*count+i)%rand_vec.len()];
 	    }
     	    image[(x,y)] = image::Rgb(new_vals);
 	    count += 1;
     	}
     }
-    println!("{:?}", image.get_pixel(0,0).to_rgb().0);
     image.save(filename.to_owned()+".png").unwrap(); //save the encyrpted image for later
-    //println!("{:?}", image::open(filename.to_owned()+".png").unwrap().get_pixel(0,0).to_rgb().0);
+    fs::remove_file(filename);
 }
 
 fn decrypt(filename: &str, encryptfile: &str) {
@@ -68,7 +71,7 @@ fn decrypt(filename: &str, encryptfile: &str) {
         for y in 0..h {
             let mut new_vals: [u8;3] = [0, 0, 0];
             for i in 0..3 {
-                new_vals[i] = img.get_pixel(x, y).to_rgb().0[i]^rand_vec[count%rand_vec.len()];
+                new_vals[i] = img.get_pixel(x, y).to_rgb().0[i]^rand_vec[(3*count+i)%rand_vec.len()];
             }
             image[(x,y)] = image::Rgb(new_vals);
             count += 1;
@@ -80,25 +83,57 @@ fn decrypt(filename: &str, encryptfile: &str) {
 }
 
 fn encrypt_text(filename: &str, encryptfile: &str) {
-  let rand_vec = reader(filename);
-  let mut f = std::fs::File::open(encryptfile).expect("Unable to create file");
+  let mut rand_vec = reader(filename);
+  rand_vec = rand_vec.into_iter().map(|x| x % 128).collect();
+  let mut f = File::open(encryptfile).expect("Unable to create file");
   let mut contents = String::new();
   f.read_to_string(&mut contents).unwrap();
   let contents = contents.as_bytes();
-  println!("{:?}", contents);
-  //let mut f = File::create(encryptfile).expect("Unable to create file");
-  //for index in 0..contents.len() {
-    //let char = contents[index] ^ rand_vec[index];
-    //println!("{} = {} ^ {}", char, rand_vec[index], contents[index]);
-    //write!(f, "{}", char as char);
-  //}
+  let mut f = File::create(encryptfile).expect("Unable to create file");
+  for index in 0..contents.len() {
+    let char = contents[index] ^ rand_vec[index];
+    write!(f, "{}", char as char);
+  }
+}
+
+fn decrypt_text(filename: &str, encryptfile: &str) {
+  let mut rand_vec = reader(filename);
+  rand_vec = rand_vec.into_iter().map(|x| x % 128).collect();
+  let mut f = File::open(encryptfile).expect("Unable to create file");
+  let mut contents = String::new();
+  f.read_to_string(&mut contents).unwrap();
+  let contents = contents.as_bytes();
+  let mut f = File::create(encryptfile).expect("Unable to create file");
+  for index in 0..contents.len() {
+    let char = contents[index] ^ rand_vec[index];
+    write!(f, "{}", char as char);
+  }
 }
 
 fn main() { 
-    pick_random("secret");
-    encrypt("f1.jpeg", ".secret");
-    decrypt("encrypted_f1.jpeg", ".secret");
-    //encrypt_text(".secret", "hello.txt");
+
+    let args: Vec<String> = env::args().collect();
+
+    if &args[1] == "encrypt" {
+	encrypt(&args[2], &args[3]);
+    }
+
+    if &args[1] == "decrypt" {
+	decrypt(&args[2], &args[3]);
+    }
+
+    if &args[1] == "encrypt_text" {
+	encrypt_text(&args[3], &args[2]);
+    }
+
+    if &args[1] == "decrypt_text" {
+	decrypt_text(&args[3], &args[2]);
+    }
+    
+    if &args[1] == "pick_random" {
+	pick_random(&args[2]);
+    }
+
 }
 
 
